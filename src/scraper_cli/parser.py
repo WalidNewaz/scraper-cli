@@ -13,7 +13,8 @@ def _get_attr(el, attr: str) -> str:
 
 def extract_items(html: str, cfg: ScraperConfig) -> List[Dict[str, Any]]:
     # If item_selector provided → multi-item page; else single item/page
-    soup = BeautifulSoup(html, "lxml") if "lxml" in BeautifulSoup.builder_registry.builders else BeautifulSoup(html, "html.parser")
+    # soup = BeautifulSoup(html, "lxml") if "lxml" in BeautifulSoup.builder_registry.builders else BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(html, 'html.parser')
 
     if cfg.item_selector:
         items = []

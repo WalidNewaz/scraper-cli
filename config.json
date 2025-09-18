@@ -4,12 +4,12 @@
   "concurrency": 5,
   "delay_ms_min": 200,
   "delay_ms_max": 600,
-  "max_depth": 1,
+  "max_depth": 3,
   "follow_same_domain_only": true,
   "respect_robots_txt": true,
   "allowed_domains": [],
   "seeds": [
-    "https://example.com"
+    "https://www.walidnewaz.com/"
   ],
   "link_filters": {
     "allow_regex": [],
