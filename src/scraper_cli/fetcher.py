@@ -80,7 +80,6 @@ def extract_links(base_url: str, html: str) -> List[str]:
     for a in soup.find_all("a", href=True):
         out.append(absolutize(base_url, a["href"]))
 
-    # print("\n".join(out))
     return out
 
 def extract_domain_filtered(
@@ -120,7 +119,6 @@ async def crawl(cfg: ScraperConfig, db: DB, max_pages: Optional[int] = None):
             TextColumn("{task.completed}/{task.total} pages"),
             TimeElapsedColumn(),
         ) as progress:
-            # print(cfg)
             task = progress.add_task("crawl", total=max_pages or 0)
             sem = asyncio.Semaphore(cfg.concurrency)
 
