@@ -10,3 +10,8 @@
 # Misc file formats
 **/*.gz
 **/*.log
+**/*.db
+**/*.db-shm
+*.db-shm
+**/*.db-wal
+*.db-wal
