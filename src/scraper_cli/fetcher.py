@@ -118,12 +118,15 @@ async def crawl(cfg: ScraperConfig, db: DB, max_pages: Optional[int] = None):
             BarColumn(),
             TextColumn("{task.completed}/{task.total} pages"),
             TimeElapsedColumn(),
+            expand = True,
         ) as progress:
-            task = progress.add_task("crawl", total=max_pages or 0)
+            all_links = {item[0] for item in to_visit}
+            task = progress.add_task("crawl", total=len(all_links))
             sem = asyncio.Semaphore(cfg.concurrency)
 
             async def worker(url: str, depth: int):
                 nonlocal visited
+                nonlocal all_links
                 if max_pages and progress.tasks[0].completed >= max_pages:
                     return
                 if url in visited:
@@ -141,7 +144,7 @@ async def crawl(cfg: ScraperConfig, db: DB, max_pages: Optional[int] = None):
                     etag=etag, last_modified=last_modified, error=error,
                     depth=depth, content_hash=content_hash
                 )
-                progress.advance(task, 1)
+                progress.update(task, advance=1)
                 # Extract links and queue
                 if html and depth < cfg.max_depth:
                     links = extract_links(u, html)
@@ -153,6 +156,9 @@ async def crawl(cfg: ScraperConfig, db: DB, max_pages: Optional[int] = None):
                     for ln in links:
                         if (not max_pages) or (progress.tasks[0].completed + len(to_visit) < max_pages):
                             to_visit.append((ln, depth + 1))
+
+                    all_links.update(links)
+                    progress.update(task, total=len(all_links))  # Update the total number of items in progress
 
                 # Extract items per config now (page-time parsing)
                 if html and cfg.extract:
