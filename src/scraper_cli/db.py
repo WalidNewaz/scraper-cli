@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS links (
 CREATE TABLE IF NOT EXISTS items (
   id INTEGER PRIMARY KEY,
   page_id INTEGER,
+  job_id INTEGER,
   data_json TEXT,
   created_at TEXT
 );
@@ -40,6 +41,24 @@ CREATE TABLE IF NOT EXISTS summaries (
   key TEXT,
   text TEXT,
   created_at TEXT
+);
+-- NEW: jobs table
+CREATE TABLE IF NOT EXISTS jobs (
+  id INTEGER PRIMARY KEY,
+  status TEXT,                    -- queued|running|succeeded|failed|canceled
+  created_at TEXT,
+  updated_at TEXT,
+  config_json TEXT,
+  max_pages INTEGER,
+  depth INTEGER
+);
+-- NEW: job events (append-only)
+CREATE TABLE IF NOT EXISTS job_events (
+  id INTEGER PRIMARY KEY,
+  job_id INTEGER,
+  type TEXT,                      -- info|progress|error|done
+  payload TEXT,
+  ts TEXT
 );
 """
 
@@ -137,3 +156,66 @@ class DB:
         cur.execute("SELECT COUNT(*) AS c FROM summaries")
         sums = cur.fetchone()["c"]
         return {"pages": pages, "items": items, "summaries": sums}
+
+    # --- jobs ---
+    def create_job(self, config_json: str, depth: Optional[int], max_pages: Optional[int]) -> int:
+        cur = self.conn.cursor()
+        cur.execute(
+            """INSERT INTO jobs(status, created_at, updated_at, config_json, max_pages, depth)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            ("queued", _now_iso(), _now_iso(), config_json, max_pages, depth)
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def update_job_status(self, job_id: int, status: str):
+        cur = self.conn.cursor()
+        cur.execute(
+            "UPDATE jobs SET status=?, updated_at=? WHERE id=?",
+            (status, _now_iso(), job_id)
+        )
+        self.conn.commit()
+
+    def get_job(self, job_id: int) -> Optional[sqlite3.Row]:
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM jobs WHERE id=?", (job_id,))
+        return cur.fetchone()
+
+    def list_jobs(self, limit: int = 50) -> List[sqlite3.Row]:
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM jobs ORDER BY id DESC LIMIT ?", (limit,))
+        return cur.fetchall()
+
+    # --- job events ---
+    def add_job_event(self, job_id: int, ev_type: str, payload: Dict[str, Any]):
+        cur = self.conn.cursor()
+        cur.execute(
+            "INSERT INTO job_events(job_id, type, payload, ts) VALUES (?, ?, ?, ?)",
+            (job_id, ev_type, json.dumps(payload), _now_iso())
+        )
+        self.conn.commit()
+
+    def recent_events(self, job_id: int, after_id: Optional[int] = None, limit: int = 100):
+        cur = self.conn.cursor()
+        if after_id:
+            cur.execute(
+                "SELECT * FROM job_events WHERE job_id=? AND id>? ORDER BY id ASC LIMIT ?",
+                (job_id, after_id, limit)
+            )
+        else:
+            cur.execute(
+                "SELECT * FROM job_events WHERE job_id=? ORDER BY id ASC LIMIT ?",
+                (job_id, limit)
+            )
+        return cur.fetchall()
+
+    # override insert_items to accept job_id
+    def insert_items(self, page_id: int, items: List[Dict[str, Any]], job_id: Optional[int] = None) -> None:
+        cur = self.conn.cursor()
+        rows = [(page_id, job_id, json.dumps(it), _now_iso()) for it in items]
+        cur.executemany(
+            "INSERT INTO items(page_id, job_id, data_json, created_at) VALUES (?, ?, ?, ?)",
+            rows
+        )
+        self.conn.commit()
+
