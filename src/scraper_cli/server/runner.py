@@ -22,7 +22,7 @@ class JobRunner:
 
         # helper: allow loading from json string (add this to config.py)
         # or reconstruct like:
-        cfg = ScraperConfig(**json.loads(job["config_json"]))
+        # cfg = ScraperConfig(**json.loads(job["config_json"]))
 
         depth = job["depth"]
         max_pages = job["max_pages"]

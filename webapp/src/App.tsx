@@ -1,35 +1,16 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState } from "react";
+import NewJobForm from "./components/NewJobForm";
+import JobsTable from "./components/JobsTable";
+import JobDetail from "./components/JobDetail";
 
-function App() {
-  const [count, setCount] = useState(0)
-
+export default function App() {
+  const [selectedJob, setSelectedJob] = useState<number | null>(null);
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div style={{maxWidth:1200, margin:"0 auto", padding:16, display:"grid", gap:24}}>
+      <h1>Scraper Control Panel</h1>
+      <NewJobForm onCreated={setSelectedJob} />
+      <JobsTable onSelect={setSelectedJob} />
+      {selectedJob && <JobDetail jobId={selectedJob} />}
+    </div>
+  );
 }
-
-export default App
