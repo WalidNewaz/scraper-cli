@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import random
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Callable, Any
 from urllib.parse import urlparse
 import httpx
 from bs4 import BeautifulSoup
@@ -10,6 +10,9 @@ import urllib.robotparser as robotparser
 from .utils import domain_of, absolutize, compile_patterns, any_match, hash_text
 from .db import DB
 from .config import ScraperConfig
+
+ProgressCb = Optional[Callable[[Dict[str, Any]], None]]
+
 
 class RobotsCache:
     def __init__(self):
@@ -29,13 +32,14 @@ class RobotsCache:
             self._cache[netloc] = rp
         return self._cache[netloc].can_fetch(user_agent, url)
 
+
 async def fetch_one(
-    client: httpx.AsyncClient,
-    db: DB,
-    cfg: ScraperConfig,
-    url: str,
-    depth: int,
-    robots: RobotsCache,
+        client: httpx.AsyncClient,
+        db: DB,
+        cfg: ScraperConfig,
+        url: str,
+        depth: int,
+        robots: RobotsCache,
 ) -> Tuple[str, Optional[str], Optional[int], Optional[str], Optional[str], Optional[str]]:
     # Returns (url, html, status, etag, last_modified, error)
     headers = {"User-Agent": cfg.user_agent, **(cfg.headers or {})}
@@ -73,6 +77,7 @@ async def fetch_one(
     except Exception as ex:
         return (url, None, None, None, None, repr(ex))
 
+
 def extract_links(base_url: str, html: str) -> List[str]:
     # soup = BeautifulSoup(html, "lxml") if "lxml" in BeautifulSoup.builder_registry.builders else BeautifulSoup(html, "html.parser")
     soup = BeautifulSoup(html, 'html.parser')
@@ -82,12 +87,13 @@ def extract_links(base_url: str, html: str) -> List[str]:
 
     return out
 
+
 def extract_domain_filtered(
-    urls: List[str],
-    base_domain: str,
-    same_domain_only: bool,
-    allowed_domains: List[str],
-    allow_patterns, deny_patterns
+        urls: List[str],
+        base_domain: str,
+        same_domain_only: bool,
+        allowed_domains: List[str],
+        allow_patterns, deny_patterns
 ) -> List[str]:
     filtered = []
     for u in urls:
@@ -103,7 +109,9 @@ def extract_domain_filtered(
         filtered.append(u)
     return filtered
 
-async def crawl(cfg: ScraperConfig, db: DB, max_pages: Optional[int] = None):
+
+async def crawl(cfg: ScraperConfig, db: DB, max_pages: Optional[int] = None, job_id: Optional[int] = None,
+                on_event: ProgressCb = None):
     visited: Set[str] = set()
     to_visit: List[Tuple[str, int]] = [(s, 0) for s in cfg.seeds]
     robots = RobotsCache()
@@ -113,12 +121,12 @@ async def crawl(cfg: ScraperConfig, db: DB, max_pages: Optional[int] = None):
     limits = httpx.Limits(max_keepalive_connections=cfg.concurrency, max_connections=cfg.concurrency)
     async with httpx.AsyncClient(limits=limits, http2=True) as client:
         with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold]Crawling[/bold]"),
-            BarColumn(),
-            TextColumn("{task.completed}/{task.total} pages"),
-            TimeElapsedColumn(),
-            expand = True,
+                SpinnerColumn(),
+                TextColumn("[bold]Crawling[/bold]"),
+                BarColumn(),
+                TextColumn("{task.completed}/{task.total} pages"),
+                TimeElapsedColumn(),
+                expand=True,
         ) as progress:
             all_links = {item[0] for item in to_visit}
             task = progress.add_task("crawl", total=len(all_links))
@@ -145,6 +153,14 @@ async def crawl(cfg: ScraperConfig, db: DB, max_pages: Optional[int] = None):
                     depth=depth, content_hash=content_hash
                 )
                 progress.update(task, advance=1)
+                if on_event:
+                    on_event({
+                        "type": "page",
+                        "url": u,
+                        "status": status,
+                        "error": error,
+                        "depth": depth
+                    })
                 # Extract links and queue
                 if html and depth < cfg.max_depth:
                     links = extract_links(u, html)
@@ -165,7 +181,9 @@ async def crawl(cfg: ScraperConfig, db: DB, max_pages: Optional[int] = None):
                     from .parser import extract_items
                     items = extract_items(html, cfg)
                     if items:
-                        db.insert_items(page_id, items)
+                        db.insert_items(page_id, items, job_id=job_id)
+                        if on_event:
+                            on_event({"type": "items", "count": len(items)})
 
             while to_visit and (not max_pages or progress.tasks[0].completed < max_pages):
                 url, depth = to_visit.pop(0)
@@ -174,4 +192,3 @@ async def crawl(cfg: ScraperConfig, db: DB, max_pages: Optional[int] = None):
                 except Exception as ex:
                     # best-effort continuity
                     db.upsert_page(url=url, domain=domain_of(url), error=repr(ex), depth=depth)
-

@@ -130,14 +130,14 @@ class DB:
         )
         self.conn.commit()
 
-    def insert_items(self, page_id: int, items: List[Dict[str, Any]]) -> None:
-        cur = self.conn.cursor()
-        rows = [(page_id, json.dumps(it), _now_iso()) for it in items]
-        cur.executemany(
-            "INSERT INTO items(page_id, data_json, created_at) VALUES (?, ?, ?)",
-            rows
-        )
-        self.conn.commit()
+    # def insert_items(self, page_id: int, items: List[Dict[str, Any]]) -> None:
+    #     cur = self.conn.cursor()
+    #     rows = [(page_id, json.dumps(it), _now_iso()) for it in items]
+    #     cur.executemany(
+    #         "INSERT INTO items(page_id, data_json, created_at) VALUES (?, ?, ?)",
+    #         rows
+    #     )
+    #     self.conn.commit()
 
     def insert_summary(self, scope: str, key: str, text: str) -> None:
         cur = self.conn.cursor()
